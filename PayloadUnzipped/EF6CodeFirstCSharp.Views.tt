@@ -1,4 +1,4 @@
-﻿<#
+<#
 /*
 Copyright (c) Pawel Kadluczka. All rights reserved.
 
@@ -31,18 +31,21 @@ Usage:
 <#@ assembly name="EnvDTE" #>
 <#@ assembly name="Microsoft.CSharp" #>
 <# 
+	string edmxFile = "MyModel.edmx";
+	string dbContextClassName = "MyContext";
+
 	var configFilePath = GetConfigFilePath();
 	if (configFilePath != null)
 	{
 		AppDomain.CurrentDomain.SetData("APP_CONFIG_FILE", configFilePath);
 	}
 	
-	var contextType = GetContextType(GetContextTypeName());
+	var contextType = GetContextType(dbContextClassName);
 
 	var efAssembly = GetEfAssembly(contextType);
 
 	dynamic mappingItemCollection = 
-		GetMappingItemCollection(efAssembly, GetEdmx(efAssembly, contextType));
+		GetMappingItemCollection(efAssembly, GetEdmx(edmxFile));
 
 	dynamic errors = 
 		Activator.CreateInstance(
@@ -148,20 +151,6 @@ namespace Edm_EntityMappingGeneratedViews
 }
 <#+
 
-	private string GetContextTypeName()
-	{
-		var templateFileName = Path.GetFileNameWithoutExtension(Host.TemplateFile);
-
-		var dotPosition = templateFileName.IndexOf('.');
-		if(dotPosition <= 0)
-		{
-			throw new InvalidOperationException(
-				string.Format("The template name '{0}' has an unexpected format.", Host.TemplateFile));
-		}
-
-		return templateFileName.Substring(0, dotPosition);
-	}
-
 	private static Type GetContextType(string contextTypeName)
 	{
 		foreach(var assembly in AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic))
@@ -209,27 +198,9 @@ namespace Edm_EntityMappingGeneratedViews
 		throw new InvalidOperationException("Cannot find DbContextType.");
 	}
 
-	private XDocument GetEdmx(Assembly efAssembly, Type contextType)
+	private XDocument GetEdmx(string edmxFilename)
 	{
-		using(var ms = new MemoryStream())
-		{
-			using(var writer = XmlWriter.Create(ms))
-			{
-				using(var context = (IDisposable)Activator.CreateInstance(contextType))
-				{								
-					var writeEdmxMethod =  
-						efAssembly
-							.GetType("System.Data.Entity.Infrastructure.EdmxWriter")
-							.GetMethod("WriteEdmx", new[] { efAssembly.GetType("System.Data.Entity.DbContext"), typeof(XmlWriter)});
-							
-					writeEdmxMethod.Invoke(null, new [] { context, writer});
-				}
-			}
-
-			ms.Position = 0;
-
-			return XDocument.Load(ms);
-		}
+		return XDocument.Load(Host.ResolvePath(edmxFilename));
 	}
 
 	private void SplitEdmx(XDocument edmx, out XmlReader csdlReader, out XmlReader ssdlReader, out XmlReader mslReader)
